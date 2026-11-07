@@ -1,2 +1,14 @@
-# classify_pictures_for_AI
-classify pictures for AI
+# COCO 2017 圖片播放器
+
+使用 Python 3 標準函式庫，依 COCO 的 `annotations/instances_val2017.json` 分類。圖片可同時屬於多個物件類別，同一張圖片在同一類別只會出現一次。沒有物件標註的圖片列入總數，但不進入類別播放清單。
+
+```bash
+python3 coco_player.py --list
+python3 coco_player.py --host 0.0.0.0
+```
+
+第一行列出所有類別與各類的圖片張數。第二行啟動播放器，在同一區域網路的瀏覽器開啟 `http://192.168.8.235:8765/`。如果在樹莓派本機瀏覽，可執行 `python3 coco_player.py` 並開啟 `http://127.0.0.1:8765/`。
+
+按「開始播放」後，播放器按 COCO 類別 ID 順序播放。每類先顯示名稱 2.5 秒，再按檔名順序顯示圖片，每張 2 秒。可暫停、手動前進，或從下拉選單切換類別。
+
+程式預設在專案目錄找資料，可用 `--data-dir` 指定其他位置。若所需圖片或標註尚未解壓，程式會使用現有 ZIP，或在缺少 ZIP 時下載。若官方下載網域連線失敗，會嘗試同一個 S3 儲存桶的 HTTPS 網址。

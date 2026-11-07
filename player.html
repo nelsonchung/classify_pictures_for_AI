@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COCO 2017 圖片播放器</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111827; color: #f9fafb; font: 1rem system-ui, sans-serif; }
+  main { width: min(72rem, 100%); margin: auto; padding: 1rem; }
+  h1 { margin: 0 0 .5rem; font-size: 1.5rem; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 1rem 0; }
+  button, select { font: inherit; padding: .5rem .75rem; border-radius: .4rem; max-width: 100%; }
+  button { border: 0; background: #bae6fd; color: #0c2437; cursor: pointer; }
+  button:disabled { cursor: default; opacity: .55; }
+  #stage { display: grid; place-items: center; min-height: min(65vh, 46rem); padding: 1rem; text-align: center; background: #030712; border-radius: .6rem; }
+  #title { font-size: clamp(2rem, 7vw, 5rem); margin: 0; }
+  #photo { display: block; width: 100%; height: min(60vh, 43rem); object-fit: contain; }
+  #photo[hidden] { display: none; }
+  #summary, #status { color: #cbd5e1; }
+</style>
+<main>
+  <h1>COCO 2017 圖片播放器</h1>
+  <div id="summary">正在載入分類清單…</div>
+  <div class="controls">
+    <label for="category">類別</label>
+    <select id="category" disabled></select>
+    <button id="play" disabled>開始播放</button>
+    <button id="next" disabled>下一張／下一類</button>
+  </div>
+  <section id="stage" aria-label="播放畫面">
+    <h2 id="title">正在載入</h2>
+    <img id="photo" alt="" hidden>
+  </section>
+  <p id="status" aria-live="polite"></p>
+</main>
+<script>
+const select = document.querySelector('#category');
+const play = document.querySelector('#play');
+const next = document.querySelector('#next');
+const title = document.querySelector('#title');
+const photo = document.querySelector('#photo');
+const status = document.querySelector('#status');
+const summary = document.querySelector('#summary');
+const titleDuration = 2500;
+const photoDuration = 2000;
+let categories = [];
+let categoryIndex = 0;
+let imageIndex = -1;
+let playing = false;
+let ready = true;
+let finished = false;
+let timer;
+let frame = 0;
+
+function schedule() {
+  clearTimeout(timer);
+  if (playing && ready) {
+    timer = setTimeout(advance, imageIndex < 0 ? titleDuration : photoDuration);
+  }
+}
+
+function setPlaying(value) {
+  playing = value;
+  play.textContent = value ? '暫停' : finished ? '重新播放' : '繼續播放';
+  schedule();
+}
+
+function showCategory(index) {
+  frame++;
+  categoryIndex = index;
+  imageIndex = -1;
+  ready = true;
+  finished = false;
+  next.disabled = false;
+  play.textContent = playing ? '暫停' : '開始播放';
+  const category = categories[index];
+  select.value = index;
+  photo.hidden = true;
+  title.hidden = false;
+  title.textContent = category.name;
+  status.textContent = `類別 ${index + 1} / ${categories.length} · ${category.images.length} 張`;
+  schedule();
+}
+
+async function showPhoto(index) {
+  const currentFrame = ++frame;
+  const category = categories[categoryIndex];
+  const name = category.images[index];
+  imageIndex = index;
+  ready = false;
+  clearTimeout(timer);
+  photo.hidden = true;
+  title.hidden = true;
+  status.textContent = `${category.name} · 第 ${index + 1} / ${category.images.length} 張 · ${name}`;
+  photo.alt = `${category.name} · ${name}`;
+  photo.src = `/images/${name}`;
+  try {
+    await photo.decode();
+    if (currentFrame !== frame) return;
+    photo.hidden = false;
+  } catch {
+    if (currentFrame !== frame) return;
+    status.textContent += '（無法載入）';
+  }
+  ready = true;
+  schedule();
+}
+
+function advance() {
+  clearTimeout(timer);
+  if (finished) return;
+  if (imageIndex + 1 < categories[categoryIndex].images.length) {
+    showPhoto(imageIndex + 1);
+  } else if (categoryIndex + 1 < categories.length) {
+    showCategory(categoryIndex + 1);
+  } else {
+    frame++;
+    finished = true;
+    photo.hidden = true;
+    title.hidden = false;
+    title.textContent = '播放完畢';
+    status.textContent = `已到達最後一個類別（共 ${categories.length} 類）`;
+    next.disabled = true;
+    setPlaying(false);
+  }
+}
+
+play.addEventListener('click', () => {
+  if (finished) showCategory(0);
+  setPlaying(!playing);
+});
+next.addEventListener('click', advance);
+select.addEventListener('change', () => showCategory(Number(select.value)));
+
+async function load() {
+  try {
+    const response = await fetch('/catalog.json');
+    if (!response.ok) throw new Error('無法讀取分類清單');
+    const data = await response.json();
+    categories = data.categories.filter(category => category.images.length);
+    summary.textContent = `${data.image_count} 張圖片 · ${categories.length} 個類別 · ${data.unlabeled_count} 張無物件標註`;
+    if (!categories.length) {
+      title.textContent = '沒有可播放的類別';
+      return;
+    }
+    categories.forEach((category, index) => {
+      select.add(new Option(`${category.name}（${category.images.length} 張）`, index));
+    });
+    select.disabled = false;
+    play.disabled = false;
+    showCategory(0);
+  } catch {
+    title.textContent = '無法載入分類清單';
+  }
+}
+
+load();
+</script>
