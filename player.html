@@ -6,15 +6,18 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #111827; color: #f9fafb; font: 1rem system-ui, sans-serif; }
-  main { width: min(72rem, 100%); margin: auto; padding: 1rem; }
+  :root { --photo-height: 60vh; }
+  main { width: 100%; margin: auto; padding: 1rem; }
   h1 { margin: 0 0 .5rem; font-size: 1.5rem; }
   .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: 1rem 0; }
-  button, select { font: inherit; padding: .5rem .75rem; border-radius: .4rem; max-width: 100%; }
+  button, select, input { font: inherit; padding: .5rem .75rem; border-radius: .4rem; max-width: 100%; }
+  input[type="number"] { width: 5rem; }
+  .settings label { display: inline-flex; align-items: center; gap: .5rem; }
   button { border: 0; background: #bae6fd; color: #0c2437; cursor: pointer; }
   button:disabled { cursor: default; opacity: .55; }
-  #stage { display: grid; place-items: center; min-height: min(65vh, 46rem); padding: 1rem; text-align: center; background: #030712; border-radius: .6rem; }
+  #stage { display: grid; place-items: center; min-height: calc(var(--photo-height) + 2rem); padding: 1rem; text-align: center; background: #030712; border-radius: .6rem; }
   #title { font-size: clamp(2rem, 7vw, 5rem); margin: 0; }
-  #photo { display: block; width: 100%; height: min(60vh, 43rem); object-fit: contain; }
+  #photo { display: block; width: 100%; height: var(--photo-height); object-fit: contain; }
   #photo[hidden] { display: none; }
   #summary, #status { color: #cbd5e1; }
 </style>
@@ -27,10 +30,23 @@
     <button id="play" disabled>開始播放</button>
     <button id="next" disabled>下一張／下一類</button>
   </div>
+  <div class="controls settings">
+    <label>播放區高度
+      <input id="size" type="range" min="20" max="90" step="5" value="60">
+      <output id="size-value" for="size">60% 螢幕高度</output>
+    </label>
+    <label>每張圖片停留
+      <input id="photo-seconds" type="number" min="0.5" max="60" step="0.5" value="2" required> 秒
+    </label>
+    <label>類別名稱停留
+      <input id="title-seconds" type="number" min="0.5" max="60" step="0.5" value="2.5" required> 秒
+    </label>
+  </div>
   <section id="stage" aria-label="播放畫面">
     <h2 id="title">正在載入</h2>
     <img id="photo" alt="" hidden>
   </section>
+  <p id="dimensions" hidden></p>
   <p id="status" aria-live="polite"></p>
 </main>
 <script>
@@ -41,8 +57,13 @@ const title = document.querySelector('#title');
 const photo = document.querySelector('#photo');
 const status = document.querySelector('#status');
 const summary = document.querySelector('#summary');
-const titleDuration = 2500;
-const photoDuration = 2000;
+const size = document.querySelector('#size');
+const sizeValue = document.querySelector('#size-value');
+const dimensions = document.querySelector('#dimensions');
+const titleSeconds = document.querySelector('#title-seconds');
+const photoSeconds = document.querySelector('#photo-seconds');
+let titleDuration = 2500;
+let photoDuration = 2000;
 let categories = [];
 let categoryIndex = 0;
 let imageIndex = -1;
@@ -51,6 +72,30 @@ let ready = true;
 let finished = false;
 let timer;
 let frame = 0;
+
+function updateDimensions() {
+  if (photo.hidden || !photo.naturalWidth) return;
+  const scale = Math.min(photo.clientWidth / photo.naturalWidth, photo.clientHeight / photo.naturalHeight);
+  const width = Math.round(photo.naturalWidth * scale);
+  const height = Math.round(photo.naturalHeight * scale);
+  dimensions.textContent = `原始圖片 ${photo.naturalWidth} × ${photo.naturalHeight} 像素 · 畫面顯示約 ${width} × ${height} CSS 像素`;
+}
+
+size.addEventListener('input', () => {
+  document.documentElement.style.setProperty('--photo-height', `${size.value}vh`);
+  sizeValue.textContent = `${size.value}% 螢幕高度`;
+  updateDimensions();
+});
+window.addEventListener('resize', updateDimensions);
+
+for (const input of [titleSeconds, photoSeconds]) {
+  input.addEventListener('change', () => {
+    if (!input.reportValidity()) return;
+    titleDuration = titleSeconds.validity.valid ? titleSeconds.valueAsNumber * 1000 : titleDuration;
+    photoDuration = photoSeconds.validity.valid ? photoSeconds.valueAsNumber * 1000 : photoDuration;
+    if ((input === titleSeconds) === (imageIndex < 0)) schedule();
+  });
+}
 
 function schedule() {
   clearTimeout(timer);
@@ -76,6 +121,7 @@ function showCategory(index) {
   const category = categories[index];
   select.value = index;
   photo.hidden = true;
+  dimensions.hidden = true;
   title.hidden = false;
   title.textContent = category.name;
   status.textContent = `類別 ${index + 1} / ${categories.length} · ${category.images.length} 張`;
@@ -90,6 +136,7 @@ async function showPhoto(index) {
   ready = false;
   clearTimeout(timer);
   photo.hidden = true;
+  dimensions.hidden = true;
   title.hidden = true;
   status.textContent = `${category.name} · 第 ${index + 1} / ${category.images.length} 張 · ${name}`;
   photo.alt = `${category.name} · ${name}`;
@@ -98,6 +145,8 @@ async function showPhoto(index) {
     await photo.decode();
     if (currentFrame !== frame) return;
     photo.hidden = false;
+    dimensions.hidden = false;
+    updateDimensions();
   } catch {
     if (currentFrame !== frame) return;
     status.textContent += '（無法載入）';
@@ -117,6 +166,7 @@ function advance() {
     frame++;
     finished = true;
     photo.hidden = true;
+    dimensions.hidden = true;
     title.hidden = false;
     title.textContent = '播放完畢';
     status.textContent = `已到達最後一個類別（共 ${categories.length} 類）`;
