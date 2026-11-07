@@ -16,6 +16,12 @@
   button { border: 0; background: #bae6fd; color: #0c2437; cursor: pointer; }
   button:disabled { cursor: default; opacity: .55; }
   #stage { display: grid; place-items: center; min-height: calc(var(--photo-height) + 2rem); padding: 1rem; text-align: center; background: #030712; border-radius: .6rem; }
+  #stage { position: relative; }
+  #exit-fullscreen { display: none; }
+  #stage:fullscreen { width: 100vw; height: 100vh; min-height: 0; padding: 0; border-radius: 0; }
+  #stage:fullscreen #photo { width: 100%; height: 100vh; }
+  #stage:fullscreen #exit-fullscreen { display: block; position: absolute; top: 1rem; right: 1rem; opacity: .3; }
+  #stage:fullscreen #exit-fullscreen:hover, #stage:fullscreen #exit-fullscreen:focus-visible { opacity: 1; }
   #title { font-size: clamp(2rem, 7vw, 5rem); margin: 0; }
   #photo { display: block; width: 100%; height: var(--photo-height); object-fit: contain; }
   #photo[hidden] { display: none; }
@@ -29,6 +35,7 @@
     <select id="category" disabled></select>
     <button id="play" disabled>開始播放</button>
     <button id="next" disabled>下一張／下一類</button>
+    <button id="fullscreen" aria-pressed="false">播放區全螢幕</button>
   </div>
   <div class="controls settings">
     <label>播放區高度
@@ -45,6 +52,7 @@
   <section id="stage" aria-label="播放畫面">
     <h2 id="title">正在載入</h2>
     <img id="photo" alt="" hidden>
+    <button id="exit-fullscreen">退出全螢幕（Esc）</button>
   </section>
   <p id="dimensions" hidden></p>
   <p id="status" aria-live="polite"></p>
@@ -62,6 +70,9 @@ const sizeValue = document.querySelector('#size-value');
 const dimensions = document.querySelector('#dimensions');
 const titleSeconds = document.querySelector('#title-seconds');
 const photoSeconds = document.querySelector('#photo-seconds');
+const stage = document.querySelector('#stage');
+const fullscreenButton = document.querySelector('#fullscreen');
+const exitFullscreenButton = document.querySelector('#exit-fullscreen');
 let titleDuration = 2500;
 let photoDuration = 2000;
 let categories = [];
@@ -72,6 +83,32 @@ let ready = true;
 let finished = false;
 let timer;
 let frame = 0;
+
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement === stage) {
+      await document.exitFullscreen();
+    } else {
+      await stage.requestFullscreen();
+    }
+  } catch {
+    status.textContent = '無法切換全螢幕，請確認瀏覽器允許全螢幕播放。';
+  }
+}
+
+fullscreenButton.disabled = !document.fullscreenEnabled;
+fullscreenButton.title = document.fullscreenEnabled ? '放大圖片與類別名稱，按 Esc 退出' : '此瀏覽器或頁面環境不支援全螢幕';
+fullscreenButton.addEventListener('click', toggleFullscreen);
+exitFullscreenButton.addEventListener('click', toggleFullscreen);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.fullscreenElement === stage) toggleFullscreen();
+});
+document.addEventListener('fullscreenchange', () => {
+  const active = document.fullscreenElement === stage;
+  fullscreenButton.setAttribute('aria-pressed', String(active));
+  (active ? exitFullscreenButton : fullscreenButton).focus();
+  updateDimensions();
+});
 
 function updateDimensions() {
   if (photo.hidden || !photo.naturalWidth) return;
