@@ -1,7 +1,21 @@
 """Prepare COCO val2017 and play the images grouped by annotated category."""
 
 import argparse
-import fcntl
+
+try:
+    import fcntl
+except ImportError:
+    class DummyFcntl:
+        LOCK_EX = 0
+        LOCK_SH = 0
+        LOCK_NB = 0
+        LOCK_UN = 0
+        @staticmethod
+        def flock(fd, op):
+            pass
+
+    fcntl = DummyFcntl()
+
 import json
 import re
 import shutil
